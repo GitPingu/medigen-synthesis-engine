@@ -5,8 +5,5 @@ secondaryBackgroundColor = "#11131A"
 textColor = "#F1F1F4"
 font = "sans serif"
 
-[ui]
-initialSidebarState = "expanded"
-
 [server]
 headless = true
