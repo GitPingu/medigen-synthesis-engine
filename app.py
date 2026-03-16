@@ -666,16 +666,6 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# ── Header ───────────────────────────────────────────────────────────────────
-st.markdown("""
-<div class="hero-container">
-    <div class="hero-eyebrow">MediGen Corp</div>
-    <div class="hero-title">Strategic Synthesis Engine</div>
-    <div class="hero-subtitle">Query internal documents across disparate systems. Get cited answers in seconds.</div>
-    <div class="hero-divider"></div>
-</div>
-""", unsafe_allow_html=True)
-
 # ── Initialize Clients ───────────────────────────────────────────────────────
 @st.cache_resource
 def get_chroma_collection():
@@ -752,6 +742,16 @@ with panel_col:
 
 
 with main_col:
+    # ── Hero Header ──────────────────────────────────────────────────────────────
+    st.markdown("""
+    <div class="hero-container">
+        <div class="hero-eyebrow">MediGen Corp</div>
+        <div class="hero-title">Strategic Synthesis Engine</div>
+        <div class="hero-subtitle">Query internal documents across disparate systems. Get cited answers in seconds.</div>
+        <div class="hero-divider"></div>
+    </div>
+    """, unsafe_allow_html=True)
+
     # ── Stats Row ────────────────────────────────────────────────────────────────
     if corpus_ready:
         total_chunks = collection.count()
