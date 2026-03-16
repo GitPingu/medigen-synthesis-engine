@@ -132,10 +132,15 @@ st.markdown("""
     section[data-testid="stSidebar"] {
         min-width: 280px !important;
         max-width: 320px !important;
+        transform: none !important;
+        display: flex !important;
+        visibility: visible !important;
+        opacity: 1 !important;
+        width: 280px !important;
+        position: relative !important;
     }
-    section[data-testid="stSidebar"][aria-expanded="false"] {
-        min-width: 280px !important;
-        margin-left: 0 !important;
+    section[data-testid="stSidebar"] > div {
+        width: 280px !important;
     }
 
     /* ── Global ────────────────────────────────────────── */
