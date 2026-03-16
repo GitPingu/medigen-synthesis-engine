@@ -27,18 +27,18 @@ def get_api_key():
             pass
     return key
 
-# ── Department Icons ─────────────────────────────────────────────────────────
+# ── Department Labels ────────────────────────────────────────────────────────
 DEPT_ICONS = {
-    "Research": "\U0001F52C",
-    "Clinical Development": "\U0001F3E5",
-    "Regulatory Affairs": "\U0001F4CB",
-    "Legal": "\u2696\uFE0F",
-    "Manufacturing & CMC": "\U0001F3ED",
-    "Quality": "\u2705",
-    "Medical Affairs": "\U0001F4CA",
-    "Commercial": "\U0001F4B0",
-    "IT": "\U0001F5A5\uFE0F",
-    "Corporate": "\U0001F3E2",
+    "Research": "RES",
+    "Clinical Development": "CLI",
+    "Regulatory Affairs": "REG",
+    "Legal": "LEG",
+    "Manufacturing & CMC": "MFG",
+    "Quality": "QA",
+    "Medical Affairs": "MED",
+    "Commercial": "COM",
+    "IT": "IT",
+    "Corporate": "CORP",
 }
 
 # ── Page Config ──────────────────────────────────────────────────────────────
@@ -197,7 +197,13 @@ st.markdown("""
     .source-card .source-header {
         display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.4rem;
     }
-    .source-card .source-icon { font-size: 1rem; }
+    .source-card .source-icon {
+        font-size: 0.55rem; font-weight: 700; letter-spacing: 1px;
+        color: #FFE501; background: rgba(255, 229, 1, 0.1);
+        border: 1px solid rgba(255, 229, 1, 0.2);
+        padding: 0.15rem 0.4rem; border-radius: 4px;
+        min-width: 28px; text-align: center;
+    }
     .source-card .source-title {
         font-weight: 600; color: #FFFFFF; font-size: 0.85rem; flex: 1;
     }
