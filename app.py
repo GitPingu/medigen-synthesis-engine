@@ -1,8 +1,12 @@
 """
 Strategic Synthesis Engine — MediGen Corp Demo
 A RAG-powered query interface over MediGen's internal document corpus.
+Tier 1: Streaming, Chat History, Feedback, Phased Loading, Export
 """
 import os
+import time
+import json
+from datetime import datetime
 import streamlit as st
 import chromadb
 import anthropic
@@ -12,7 +16,6 @@ load_dotenv(os.path.join(os.path.dirname(__file__), ".env"))
 
 CHROMA_DIR = os.path.join(os.path.dirname(__file__), "chroma_db")
 
-# Support both .env (local) and st.secrets (Streamlit Cloud)
 def get_api_key():
     key = os.getenv("ANTHROPIC_API_KEY")
     if not key:
@@ -30,19 +33,22 @@ st.set_page_config(
     initial_sidebar_state="expanded",
 )
 
-# ── Tenex-Inspired Dark Theme ────────────────────────────────────────────────
+# ── Session State Init ───────────────────────────────────────────────────────
+if "messages" not in st.session_state:
+    st.session_state.messages = []
+if "feedback_log" not in st.session_state:
+    st.session_state.feedback_log = []
+
+# ── Dark Theme CSS ───────────────────────────────────────────────────────────
 st.markdown("""
 <style>
     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
 
-    /* ── Global Dark Theme ── */
     .stApp {
         background-color: #0A0A0B !important;
         color: #E8E8E8;
         font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
     }
-
-    /* ── Hide Streamlit Defaults ── */
     #MainMenu, footer, header {visibility: hidden;}
     .stDeployButton {display: none;}
 
@@ -63,8 +69,8 @@ st.markdown("""
     /* ── Hero Header ── */
     .hero-container {
         position: relative;
-        padding: 2.5rem 2.5rem 2rem;
-        margin: -1rem -1rem 2rem -1rem;
+        padding: 2rem 2.5rem 1.5rem;
+        margin: -1rem -1rem 1.5rem -1rem;
         background: linear-gradient(135deg, #0A0A0B 0%, #141418 50%, #0A0A0B 100%);
         border-bottom: 1px solid #1E1E22;
         overflow: hidden;
@@ -72,122 +78,77 @@ st.markdown("""
     .hero-container::before {
         content: '';
         position: absolute;
-        top: -50%;
-        left: -50%;
-        width: 200%;
-        height: 200%;
+        top: -50%; left: -50%;
+        width: 200%; height: 200%;
         background: radial-gradient(circle at 30% 50%, rgba(255, 229, 1, 0.03) 0%, transparent 50%),
                     radial-gradient(circle at 70% 80%, rgba(255, 229, 1, 0.02) 0%, transparent 40%);
         pointer-events: none;
     }
     .hero-eyebrow {
-        font-size: 0.7rem;
-        font-weight: 600;
-        letter-spacing: 3px;
-        text-transform: uppercase;
-        color: #FFE501;
-        margin-bottom: 0.5rem;
+        font-size: 0.7rem; font-weight: 600; letter-spacing: 3px;
+        text-transform: uppercase; color: #FFE501; margin-bottom: 0.4rem;
     }
     .hero-title {
-        font-size: 2.4rem;
-        font-weight: 800;
-        color: #FFFFFF;
-        margin: 0;
-        line-height: 1.15;
-        letter-spacing: -0.02em;
+        font-size: 2.2rem; font-weight: 800; color: #FFFFFF;
+        margin: 0; line-height: 1.15; letter-spacing: -0.02em;
     }
     .hero-subtitle {
-        font-size: 1rem;
-        color: #6B6B75;
-        margin-top: 0.6rem;
-        font-weight: 400;
+        font-size: 0.95rem; color: #6B6B75; margin-top: 0.5rem; font-weight: 400;
     }
     .hero-divider {
-        width: 48px;
-        height: 3px;
-        background: #FFE501;
-        margin-top: 1.2rem;
-        border-radius: 2px;
+        width: 48px; height: 3px; background: #FFE501;
+        margin-top: 1rem; border-radius: 2px;
     }
 
     /* ── Metric Cards ── */
     .metric-row {
-        display: flex;
-        gap: 0.8rem;
-        margin-bottom: 1rem;
+        display: flex; gap: 0.8rem; margin-bottom: 1rem;
     }
     .stat-card {
-        background: #141418;
-        border: 1px solid #1E1E22;
-        border-radius: 10px;
-        padding: 1rem 1.2rem;
-        text-align: center;
-        flex: 1;
-        transition: border-color 0.3s ease;
+        background: #141418; border: 1px solid #1E1E22;
+        border-radius: 10px; padding: 0.8rem 1rem;
+        text-align: center; flex: 1; transition: border-color 0.3s ease;
     }
-    .stat-card:hover {
-        border-color: #FFE501;
-    }
+    .stat-card:hover { border-color: #FFE501; }
     .stat-card .stat-value {
-        font-size: 1.8rem;
-        font-weight: 800;
-        color: #FFE501;
-        margin: 0;
-        line-height: 1.2;
+        font-size: 1.6rem; font-weight: 800; color: #FFE501; margin: 0; line-height: 1.2;
     }
     .stat-card .stat-label {
-        font-size: 0.65rem;
-        color: #6B6B75;
-        text-transform: uppercase;
-        letter-spacing: 1.5px;
-        margin-top: 0.3rem;
+        font-size: 0.6rem; color: #6B6B75; text-transform: uppercase;
+        letter-spacing: 1.5px; margin-top: 0.2rem;
     }
 
     /* ── Section Headers ── */
     .section-label {
-        font-size: 0.65rem;
-        font-weight: 600;
-        letter-spacing: 2.5px;
-        text-transform: uppercase;
-        color: #FFE501;
-        margin-bottom: 0.8rem;
-        margin-top: 1.5rem;
+        font-size: 0.65rem; font-weight: 600; letter-spacing: 2.5px;
+        text-transform: uppercase; color: #FFE501;
+        margin-bottom: 0.8rem; margin-top: 1.5rem;
     }
 
-    /* ── Example Query Buttons ── */
+    /* ── Buttons ── */
     .stButton > button {
-        background: #141418 !important;
-        color: #C8C8D0 !important;
-        border: 1px solid #2A2A30 !important;
-        border-radius: 8px !important;
-        padding: 0.6rem 1rem !important;
-        font-size: 0.82rem !important;
-        font-family: 'Inter', sans-serif !important;
-        font-weight: 400 !important;
-        text-align: left !important;
-        transition: all 0.25s ease !important;
+        background: #141418 !important; color: #C8C8D0 !important;
+        border: 1px solid #2A2A30 !important; border-radius: 8px !important;
+        padding: 0.6rem 1rem !important; font-size: 0.82rem !important;
+        font-family: 'Inter', sans-serif !important; font-weight: 400 !important;
+        text-align: left !important; transition: all 0.25s ease !important;
         line-height: 1.4 !important;
     }
     .stButton > button:hover {
-        border-color: #FFE501 !important;
-        color: #FFFFFF !important;
+        border-color: #FFE501 !important; color: #FFFFFF !important;
         background: #1A1A1F !important;
         box-shadow: 0 0 20px rgba(255, 229, 1, 0.05) !important;
     }
     .stButton > button:active {
-        background: #FFE501 !important;
-        color: #0A0A0B !important;
+        background: #FFE501 !important; color: #0A0A0B !important;
         border-color: #FFE501 !important;
     }
 
     /* ── Text Input ── */
     .stTextInput > div > div > input {
-        background: #141418 !important;
-        color: #FFFFFF !important;
-        border: 1px solid #2A2A30 !important;
-        border-radius: 10px !important;
-        padding: 0.8rem 1rem !important;
-        font-size: 0.95rem !important;
+        background: #141418 !important; color: #FFFFFF !important;
+        border: 1px solid #2A2A30 !important; border-radius: 10px !important;
+        padding: 0.8rem 1rem !important; font-size: 0.95rem !important;
         font-family: 'Inter', sans-serif !important;
         transition: border-color 0.25s ease !important;
     }
@@ -195,166 +156,159 @@ st.markdown("""
         border-color: #FFE501 !important;
         box-shadow: 0 0 0 1px #FFE501, 0 0 20px rgba(255, 229, 1, 0.08) !important;
     }
-    .stTextInput > div > div > input::placeholder {
-        color: #4A4A55 !important;
+    .stTextInput > div > div > input::placeholder { color: #4A4A55 !important; }
+    .stTextInput label { color: #A0A0A8 !important; font-size: 0.85rem !important; }
+
+    /* ── Chat Input ── */
+    .stChatInput > div {
+        background: #141418 !important; border: 1px solid #2A2A30 !important;
+        border-radius: 10px !important;
     }
-    .stTextInput label {
-        color: #A0A0A8 !important;
-        font-size: 0.85rem !important;
+    .stChatInput textarea {
+        color: #FFFFFF !important; font-family: 'Inter', sans-serif !important;
+    }
+    .stChatInput button {
+        color: #FFE501 !important;
     }
 
-    /* ── Answer Container ── */
-    .answer-container {
-        background: #111113;
-        border: 1px solid #1E1E22;
-        border-radius: 12px;
-        padding: 1.5rem 1.8rem;
-        margin: 1.5rem 0;
-        line-height: 1.75;
-        color: #D0D0D8;
-        font-size: 0.92rem;
+    /* ── Chat Messages ── */
+    .stChatMessage {
+        background: transparent !important;
+        border: none !important;
     }
-    .answer-container strong {
-        color: #FFFFFF;
+    [data-testid="stChatMessageAvatarUser"] {
+        background: #FFE501 !important;
+    }
+    [data-testid="stChatMessageAvatarAssistant"] {
+        background: #2A2A30 !important;
     }
 
     /* ── Source Cards ── */
     .source-card {
-        background: #111113;
-        border: 1px solid #1E1E22;
-        border-left: 3px solid #FFE501;
-        padding: 1rem 1.2rem;
-        margin: 0.6rem 0;
-        border-radius: 0 10px 10px 0;
+        background: #111113; border: 1px solid #1E1E22;
+        border-left: 3px solid #FFE501; padding: 1rem 1.2rem;
+        margin: 0.6rem 0; border-radius: 0 10px 10px 0;
         transition: all 0.25s ease;
+        animation: fadeInUp 0.3s ease-out both;
     }
+    .source-card:nth-child(2) { animation-delay: 0.05s; }
+    .source-card:nth-child(3) { animation-delay: 0.1s; }
+    .source-card:nth-child(4) { animation-delay: 0.15s; }
+    .source-card:nth-child(5) { animation-delay: 0.2s; }
+    .source-card:nth-child(6) { animation-delay: 0.25s; }
+    .source-card:nth-child(7) { animation-delay: 0.3s; }
+    .source-card:nth-child(8) { animation-delay: 0.35s; }
     .source-card:hover {
-        border-color: #2A2A30;
-        border-left-color: #FFE501;
-        background: #141418;
+        border-color: #2A2A30; border-left-color: #FFE501; background: #141418;
     }
     .source-card .source-title {
-        font-weight: 600;
-        color: #FFFFFF;
-        font-size: 0.85rem;
-        margin-bottom: 0.4rem;
+        font-weight: 600; color: #FFFFFF; font-size: 0.85rem; margin-bottom: 0.4rem;
     }
     .source-card .source-meta {
-        color: #6B6B75;
-        font-size: 0.72rem;
-        letter-spacing: 0.3px;
+        color: #6B6B75; font-size: 0.72rem; letter-spacing: 0.3px;
     }
     .source-card .source-excerpt {
-        color: #8A8A95;
-        margin-top: 0.5rem;
-        font-size: 0.8rem;
-        line-height: 1.5;
+        color: #8A8A95; margin-top: 0.5rem; font-size: 0.8rem; line-height: 1.5;
     }
 
     /* ── Relevance Badges ── */
     .confidence-badge {
-        display: inline-block;
-        padding: 0.15rem 0.55rem;
-        border-radius: 20px;
-        font-size: 0.65rem;
-        font-weight: 600;
-        letter-spacing: 0.5px;
-        margin-left: 0.5rem;
-        vertical-align: middle;
+        display: inline-block; padding: 0.15rem 0.55rem; border-radius: 20px;
+        font-size: 0.65rem; font-weight: 600; letter-spacing: 0.5px;
+        margin-left: 0.5rem; vertical-align: middle;
     }
     .conf-high {
-        background: rgba(255, 229, 1, 0.15);
-        color: #FFE501;
+        background: rgba(255, 229, 1, 0.15); color: #FFE501;
         border: 1px solid rgba(255, 229, 1, 0.3);
     }
     .conf-medium {
-        background: rgba(255, 165, 0, 0.12);
-        color: #FFA500;
+        background: rgba(255, 165, 0, 0.12); color: #FFA500;
         border: 1px solid rgba(255, 165, 0, 0.25);
     }
     .conf-low {
-        background: rgba(255, 80, 80, 0.1);
-        color: #FF6B6B;
+        background: rgba(255, 80, 80, 0.1); color: #FF6B6B;
         border: 1px solid rgba(255, 80, 80, 0.2);
     }
 
     /* ── Sidebar Metrics ── */
     .sidebar-metric {
-        background: #141418;
-        border: 1px solid #1E1E22;
-        border-radius: 8px;
-        padding: 0.8rem;
-        text-align: center;
+        background: #141418; border: 1px solid #1E1E22;
+        border-radius: 8px; padding: 0.8rem; text-align: center;
         margin-bottom: 0.5rem;
     }
     .sidebar-metric .sm-value {
-        font-size: 1.4rem;
-        font-weight: 800;
-        color: #FFE501;
-        margin: 0;
+        font-size: 1.4rem; font-weight: 800; color: #FFE501; margin: 0;
     }
     .sidebar-metric .sm-label {
-        font-size: 0.6rem;
-        color: #6B6B75;
-        text-transform: uppercase;
-        letter-spacing: 1.5px;
-        margin-top: 0.15rem;
+        font-size: 0.6rem; color: #6B6B75; text-transform: uppercase;
+        letter-spacing: 1.5px; margin-top: 0.15rem;
     }
 
-    /* ── Spinner ── */
-    .stSpinner > div {
-        border-top-color: #FFE501 !important;
+    /* ── Performance Bar ── */
+    .perf-bar {
+        display: flex; gap: 1.5rem; padding: 0.5rem 0; margin-top: 0.5rem;
+        font-size: 0.7rem; color: #4A4A55; letter-spacing: 0.5px;
+    }
+    .perf-bar span { color: #6B6B75; }
+
+    /* ── Animations ── */
+    @keyframes fadeInUp {
+        from { opacity: 0; transform: translateY(8px); }
+        to { opacity: 1; transform: translateY(0); }
     }
 
-    /* ── Info Box ── */
+    /* ── Misc ── */
+    .stSpinner > div { border-top-color: #FFE501 !important; }
     .stAlert {
-        background-color: #141418 !important;
-        border: 1px solid #1E1E22 !important;
-        color: #6B6B75 !important;
-        border-radius: 10px !important;
+        background-color: #141418 !important; border: 1px solid #1E1E22 !important;
+        color: #6B6B75 !important; border-radius: 10px !important;
     }
-
-    /* ── Slider ── */
     .stSlider label { color: #A0A0A8 !important; }
     .stSlider [data-testid="stTickBarMin"],
     .stSlider [data-testid="stTickBarMax"] { color: #6B6B75 !important; }
-
-    /* ── Multiselect ── */
     .stMultiSelect label { color: #A0A0A8 !important; }
     .stMultiSelect [data-baseweb="select"] {
-        background-color: #141418 !important;
-        border-color: #2A2A30 !important;
+        background-color: #141418 !important; border-color: #2A2A30 !important;
     }
-
-    /* ── Dividers ── */
-    hr {
-        border-color: #1E1E22 !important;
-    }
-
-    /* ── Sidebar brand ── */
+    hr { border-color: #1E1E22 !important; }
     .sidebar-brand {
-        padding: 0.8rem 0;
-        margin-bottom: 1rem;
-        border-bottom: 1px solid #1E1E22;
+        padding: 0.8rem 0; margin-bottom: 1rem; border-bottom: 1px solid #1E1E22;
     }
     .sidebar-brand .brand-name {
-        font-size: 0.65rem;
-        font-weight: 600;
-        letter-spacing: 3px;
-        text-transform: uppercase;
-        color: #FFE501;
+        font-size: 0.65rem; font-weight: 600; letter-spacing: 3px;
+        text-transform: uppercase; color: #FFE501;
     }
     .sidebar-brand .brand-sub {
-        font-size: 0.7rem;
-        color: #4A4A55;
-        margin-top: 0.2rem;
+        font-size: 0.7rem; color: #4A4A55; margin-top: 0.2rem;
     }
-
-    /* ── Scrollbar ── */
     ::-webkit-scrollbar { width: 6px; }
     ::-webkit-scrollbar-track { background: #0A0A0B; }
     ::-webkit-scrollbar-thumb { background: #2A2A30; border-radius: 3px; }
     ::-webkit-scrollbar-thumb:hover { background: #3A3A42; }
+
+    /* ── Download Button ── */
+    .stDownloadButton > button {
+        background: #141418 !important; color: #FFE501 !important;
+        border: 1px solid #2A2A30 !important; border-radius: 8px !important;
+        font-size: 0.75rem !important; padding: 0.4rem 0.8rem !important;
+        font-family: 'Inter', sans-serif !important;
+    }
+    .stDownloadButton > button:hover {
+        border-color: #FFE501 !important; background: #1A1A1F !important;
+    }
+
+    /* ── Feedback Buttons ── */
+    .stFeedback button {
+        background: #141418 !important; border: 1px solid #2A2A30 !important;
+        color: #6B6B75 !important;
+    }
+    .stFeedback button:hover {
+        border-color: #FFE501 !important; color: #FFE501 !important;
+    }
+    .stFeedback button[aria-pressed="true"] {
+        background: rgba(255, 229, 1, 0.15) !important;
+        border-color: #FFE501 !important; color: #FFE501 !important;
+    }
 </style>
 """, unsafe_allow_html=True)
 
@@ -363,7 +317,7 @@ st.markdown("""
 <div class="hero-container">
     <div class="hero-eyebrow">MediGen Corp</div>
     <div class="hero-title">Strategic Synthesis Engine</div>
-    <div class="hero-subtitle">Query 50,000 internal documents across 8 systems. Get cited answers in seconds.</div>
+    <div class="hero-subtitle">Query 1,050 internal documents across 8 systems. Get cited answers in seconds.</div>
     <div class="hero-divider"></div>
 </div>
 """, unsafe_allow_html=True)
@@ -380,7 +334,7 @@ def get_anthropic_client():
 
 try:
     collection = get_chroma_collection()
-    client = get_anthropic_client()
+    llm_client = get_anthropic_client()
     corpus_ready = True
 except Exception as e:
     corpus_ready = False
@@ -398,21 +352,18 @@ with st.sidebar:
     n_results = st.slider("Sources to retrieve", 3, 15, 8)
     dept_filter = st.multiselect(
         "Filter by department",
-        [
-            "Research",
-            "Clinical Development",
-            "Regulatory Affairs",
-            "Legal",
-            "Manufacturing & CMC",
-            "Quality",
-            "Medical Affairs",
-            "Commercial",
-            "IT",
-            "Corporate",
-        ],
+        ["Research", "Clinical Development", "Regulatory Affairs", "Legal",
+         "Manufacturing & CMC", "Quality", "Medical Affairs", "Commercial",
+         "IT", "Corporate"],
         default=[],
         help="Leave empty to search all departments",
     )
+
+    st.markdown("---")
+
+    if st.button("New Conversation", use_container_width=True):
+        st.session_state.messages = []
+        st.rerun()
 
     st.markdown("---")
 
@@ -555,52 +506,179 @@ if dept_filter:
 else:
     example_queries = default_queries
 
-st.markdown('<div class="section-label">Try a question</div>', unsafe_allow_html=True)
-cols = st.columns(3)
-for i, q in enumerate(example_queries[:6]):
-    col = cols[i % 3]
-    if col.button(q, key=f"example_{i}", use_container_width=True):
-        st.session_state["selected_query"] = q
-        st.rerun()
+# Only show example queries if no conversation yet
+if not st.session_state.messages:
+    st.markdown('<div class="section-label">Try a question</div>', unsafe_allow_html=True)
+    cols = st.columns(3)
+    for i, q in enumerate(example_queries[:6]):
+        col = cols[i % 3]
+        if col.button(q, key=f"example_{i}", use_container_width=True):
+            st.session_state["selected_query"] = q
+            st.rerun()
 
-# ── Query Input ──────────────────────────────────────────────────────────────
-default_value = st.session_state.pop("selected_query", "")
-query = st.text_input(
-    "Ask a question across MediGen's knowledge base",
-    value=default_value,
-    placeholder="e.g., What were the key findings from our MG-401 toxicology studies?",
-)
+# ── Helper: Render Source Cards ──────────────────────────────────────────────
+def render_sources(sources):
+    st.markdown('<div class="section-label">Sources Retrieved</div>', unsafe_allow_html=True)
+    for i, src in enumerate(sources):
+        relevance = src["relevance"]
+        if relevance >= 70:
+            conf_class, conf_label = "conf-high", "HIGH"
+        elif relevance >= 40:
+            conf_class, conf_label = "conf-medium", "MED"
+        else:
+            conf_class, conf_label = "conf-low", "LOW"
 
-if query and corpus_ready:
-    with st.spinner("Retrieving and synthesizing..."):
-        # ── Retrieve ─────────────────────────────────────────────────────
-        where_filter = None
-        if dept_filter:
-            if len(dept_filter) == 1:
-                where_filter = {"department": dept_filter[0]}
-            else:
-                where_filter = {"department": {"$in": dept_filter}}
+        st.markdown(f"""
+        <div class="source-card">
+            <div class="source-title">
+                Source {i+1}: {src['filename']}
+                <span class="confidence-badge {conf_class}">{conf_label} {relevance}%</span>
+            </div>
+            <div class="source-meta">
+                {src['department']} &bull; {src['system']} &bull; {src['program']}
+            </div>
+            <div class="source-excerpt">{src['excerpt']}</div>
+        </div>
+        """, unsafe_allow_html=True)
 
-        results = collection.query(
-            query_texts=[query],
-            n_results=n_results,
-            where=where_filter,
-            include=["documents", "metadatas", "distances"],
-        )
+# ── Helper: Build Export Content ─────────────────────────────────────────────
+def build_export(query, answer, sources, retrieval_ms, generation_ms):
+    lines = [
+        f"# Strategic Synthesis Engine — Query Export",
+        f"**Date:** {datetime.now().strftime('%Y-%m-%d %H:%M')}",
+        f"**Query:** {query}",
+        f"**Retrieval:** {retrieval_ms}ms | **Generation:** {generation_ms}ms",
+        "",
+        "---",
+        "",
+        "## Answer",
+        "",
+        answer,
+        "",
+        "---",
+        "",
+        "## Sources",
+        "",
+    ]
+    for i, src in enumerate(sources):
+        lines.append(f"**Source {i+1}:** {src['filename']} ({src['department']} / {src['system']}) — Relevance: {src['relevance']}%")
+    lines.append("")
+    lines.append("---")
+    lines.append("*Exported from Strategic Synthesis Engine — MediGen Corp*")
+    return "\n".join(lines)
 
-        retrieved_docs = results["documents"][0]
-        retrieved_metas = results["metadatas"][0]
-        retrieved_distances = results["distances"][0]
+# ── Display Chat History ─────────────────────────────────────────────────────
+for msg in st.session_state.messages:
+    with st.chat_message(msg["role"]):
+        st.markdown(msg["content"])
+        if msg["role"] == "assistant" and "sources" in msg:
+            # Performance metrics
+            if "retrieval_ms" in msg:
+                st.markdown(f"""<div class="perf-bar">
+                    <span>Retrieved {len(msg['sources'])} sources in {msg['retrieval_ms']}ms</span>
+                    <span>Answer generated in {msg['generation_ms']}ms</span>
+                    <span>Total: {msg['retrieval_ms'] + msg['generation_ms']}ms</span>
+                </div>""", unsafe_allow_html=True)
 
-        # ── Build context ────────────────────────────────────────────────
+            # Export button
+            export_content = build_export(
+                msg.get("query", ""),
+                msg["content"],
+                msg["sources"],
+                msg.get("retrieval_ms", 0),
+                msg.get("generation_ms", 0),
+            )
+            st.download_button(
+                "Export Answer",
+                export_content,
+                file_name=f"sse_export_{datetime.now().strftime('%Y%m%d_%H%M')}.md",
+                mime="text/markdown",
+                key=f"export_{msg.get('timestamp', id(msg))}",
+            )
+
+            # Feedback
+            feedback = st.feedback(
+                "thumbs",
+                key=f"feedback_{msg.get('timestamp', id(msg))}",
+            )
+            if feedback is not None:
+                st.session_state.feedback_log.append({
+                    "query": msg.get("query", ""),
+                    "rating": "positive" if feedback == 1 else "negative",
+                    "timestamp": datetime.now().isoformat(),
+                })
+
+            # Source cards
+            render_sources(msg["sources"])
+
+# ── Chat Input ───────────────────────────────────────────────────────────────
+selected = st.session_state.pop("selected_query", None)
+if selected:
+    prompt = selected
+elif corpus_ready:
+    prompt = st.chat_input("Ask a question across MediGen's knowledge base...")
+else:
+    prompt = None
+
+if prompt and corpus_ready:
+    # Add user message
+    st.session_state.messages.append({"role": "user", "content": prompt})
+    with st.chat_message("user"):
+        st.markdown(prompt)
+
+    # ── Assistant Response ────────────────────────────────────────────────
+    with st.chat_message("assistant"):
+
+        # Phase 1: Retrieval
+        with st.status("Searching document corpus...", expanded=True) as status:
+            st.write(f"Querying {total_chunks:,} document chunks...")
+            t0 = time.perf_counter()
+
+            where_filter = None
+            if dept_filter:
+                if len(dept_filter) == 1:
+                    where_filter = {"department": dept_filter[0]}
+                else:
+                    where_filter = {"department": {"$in": dept_filter}}
+
+            results = collection.query(
+                query_texts=[prompt],
+                n_results=n_results,
+                where=where_filter,
+                include=["documents", "metadatas", "distances"],
+            )
+
+            retrieved_docs = results["documents"][0]
+            retrieved_metas = results["metadatas"][0]
+            retrieved_distances = results["distances"][0]
+
+            retrieval_ms = int((time.perf_counter() - t0) * 1000)
+            st.write(f"Found {len(retrieved_docs)} relevant sources in {retrieval_ms}ms")
+            status.update(label=f"Retrieved {len(retrieved_docs)} sources in {retrieval_ms}ms", state="complete")
+
+        # Build source data
+        sources_data = []
+        for doc, meta, dist in zip(retrieved_docs, retrieved_metas, retrieved_distances):
+            relevance = max(0, min(100, int((1 - dist / 2) * 100)))
+            excerpt = doc[:300].replace("\n", " ").strip()
+            if len(doc) > 300:
+                excerpt += "..."
+            sources_data.append({
+                "filename": meta.get("filename", "unknown"),
+                "department": meta.get("department", "unknown"),
+                "system": meta.get("source", "unknown"),
+                "program": meta.get("program", "N/A"),
+                "relevance": relevance,
+                "excerpt": excerpt,
+            })
+
+        # Build context for LLM
         context_parts = []
         for i, (doc, meta) in enumerate(zip(retrieved_docs, retrieved_metas)):
             source_label = f"[Source {i+1}: {meta.get('filename', 'unknown')} | Dept: {meta.get('department', 'unknown')} | System: {meta.get('source', 'unknown')}]"
             context_parts.append(f"{source_label}\n{doc}")
-
         context = "\n\n---\n\n".join(context_parts)
 
-        # ── Generate Answer ──────────────────────────────────────────────
         system_prompt = """You are the Strategic Synthesis Engine, an AI knowledge retrieval system for MediGen Corp, a biotech company. Your role is to answer questions using ONLY the retrieved document excerpts provided below. Follow these rules strictly:
 
 1. ONLY use information from the provided source documents. Never use outside knowledge.
@@ -610,66 +688,86 @@ if query and corpus_ready:
 5. Structure your answer with a direct response first, followed by supporting details.
 6. At the end, list all sources used with their department and system of origin."""
 
+        # Build messages with conversation context (last 3 turns for context)
+        llm_messages = []
+        recent_history = st.session_state.messages[:-1][-6:]  # last 3 exchanges
+        for msg in recent_history:
+            if msg["role"] in ("user", "assistant"):
+                llm_messages.append({"role": msg["role"], "content": msg["content"]})
+
+        # Current turn with retrieved context
         user_prompt = f"""RETRIEVED DOCUMENTS:
 
 {context}
 
 ---
 
-QUESTION: {query}
+QUESTION: {prompt}
 
 Provide a comprehensive, cited answer based solely on the retrieved documents above."""
 
-        response = client.messages.create(
+        llm_messages.append({"role": "user", "content": user_prompt})
+
+        # Phase 2: Streaming generation
+        t1 = time.perf_counter()
+        answer_placeholder = st.empty()
+        full_answer = ""
+
+        with llm_client.messages.stream(
             model="claude-sonnet-4-20250514",
             max_tokens=1500,
             system=system_prompt,
-            messages=[{"role": "user", "content": user_prompt}],
+            messages=llm_messages,
+        ) as stream:
+            for text in stream.text_stream:
+                full_answer += text
+                answer_placeholder.markdown(full_answer + " ")
+
+        answer_placeholder.markdown(full_answer)
+        generation_ms = int((time.perf_counter() - t1) * 1000)
+
+        # Performance metrics
+        st.markdown(f"""<div class="perf-bar">
+            <span>Retrieved {len(sources_data)} sources in {retrieval_ms}ms</span>
+            <span>Answer generated in {generation_ms}ms</span>
+            <span>Total: {retrieval_ms + generation_ms}ms</span>
+        </div>""", unsafe_allow_html=True)
+
+        # Export button
+        timestamp = datetime.now().isoformat()
+        export_content = build_export(prompt, full_answer, sources_data, retrieval_ms, generation_ms)
+        st.download_button(
+            "Export Answer",
+            export_content,
+            file_name=f"sse_export_{datetime.now().strftime('%Y%m%d_%H%M')}.md",
+            mime="text/markdown",
+            key=f"export_current_{timestamp}",
         )
 
-        answer = response.content[0].text
+        # Feedback
+        feedback = st.feedback("thumbs", key=f"feedback_current_{timestamp}")
+        if feedback is not None:
+            st.session_state.feedback_log.append({
+                "query": prompt,
+                "rating": "positive" if feedback == 1 else "negative",
+                "timestamp": timestamp,
+            })
 
-    # ── Display Answer ───────────────────────────────────────────────────
-    st.markdown('<div class="section-label">Synthesized Answer</div>', unsafe_allow_html=True)
-    st.markdown(answer)
+        # Source cards
+        render_sources(sources_data)
 
-    # ── Display Sources ──────────────────────────────────────────────────
-    st.markdown('<div class="section-label">Sources Retrieved</div>', unsafe_allow_html=True)
+        # Store assistant message
+        st.session_state.messages.append({
+            "role": "assistant",
+            "content": full_answer,
+            "sources": sources_data,
+            "query": prompt,
+            "retrieval_ms": retrieval_ms,
+            "generation_ms": generation_ms,
+            "timestamp": timestamp,
+        })
 
-    for i, (doc, meta, dist) in enumerate(
-        zip(retrieved_docs, retrieved_metas, retrieved_distances)
-    ):
-        relevance = max(0, min(100, int((1 - dist / 2) * 100)))
-        if relevance >= 70:
-            conf_class = "conf-high"
-            conf_label = "HIGH"
-        elif relevance >= 40:
-            conf_class = "conf-medium"
-            conf_label = "MED"
-        else:
-            conf_class = "conf-low"
-            conf_label = "LOW"
-
-        excerpt = doc[:300].replace("\n", " ").strip()
-        if len(doc) > 300:
-            excerpt += "..."
-
-        st.markdown(f"""
-        <div class="source-card">
-            <div class="source-title">
-                Source {i+1}: {meta.get('filename', 'unknown')}
-                <span class="confidence-badge {conf_class}">{conf_label} {relevance}%</span>
-            </div>
-            <div class="source-meta">
-                {meta.get('department', 'unknown')} &bull;
-                {meta.get('source', 'unknown')} &bull;
-                {meta.get('program', 'N/A')}
-            </div>
-            <div class="source-excerpt">{excerpt}</div>
-        </div>
-        """, unsafe_allow_html=True)
-
-elif not query:
+elif not st.session_state.messages and not prompt:
     st.markdown("""
     <div style="text-align: center; padding: 3rem 0; color: #4A4A55;">
         <div style="font-size: 2rem; margin-bottom: 0.5rem;">&#8593;</div>
