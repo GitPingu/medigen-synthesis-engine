@@ -129,6 +129,8 @@ st.markdown("""
     [data-testid="collapsedControl"] {
         display: none !important;
     }
+
+    /* Lock sidebar outer shell to 340px */
     section[data-testid="stSidebar"] {
         min-width: 340px !important;
         max-width: 340px !important;
@@ -140,20 +142,65 @@ st.markdown("""
         position: relative !important;
         background: var(--bg-secondary) !important;
     }
-    section[data-testid="stSidebar"] > div {
+
+    /* Force EVERY nested div inside the sidebar to fill width.
+       Streamlit >= 1.41 wraps content in 4-6 layers of divs,
+       each with its own width/max-width/padding constraints.     */
+    section[data-testid="stSidebar"] > div,
+    section[data-testid="stSidebar"] > div > div,
+    section[data-testid="stSidebar"] > div > div > div,
+    section[data-testid="stSidebar"] [data-testid="stSidebarContent"],
+    section[data-testid="stSidebar"] [data-testid="stSidebarUserContent"],
+    section[data-testid="stSidebar"] [data-testid="stVerticalBlock"],
+    section[data-testid="stSidebar"] [data-testid="stVerticalBlockBorderWrapper"],
+    section[data-testid="stSidebar"] .block-container,
+    section[data-testid="stSidebar"] [data-testid="stElementContainer"] {
         width: 100% !important;
+        max-width: 100% !important;
+        min-width: 0 !important;
+        padding-left: 0 !important;
+        padding-right: 0 !important;
+        box-sizing: border-box !important;
+    }
+
+    /* Restore sidebar top-level padding (the one we actually want) */
+    section[data-testid="stSidebar"] > div:first-child {
         padding: 1rem 1.25rem !important;
+        width: 100% !important;
+        max-width: 100% !important;
+        box-sizing: border-box !important;
     }
-    section[data-testid="stSidebar"] > div > div {
+    section[data-testid="stSidebar"] > div > div:first-child {
         padding-top: 0 !important;
-        width: 100% !important;
     }
-    section[data-testid="stSidebar"] [data-testid="stVerticalBlock"] {
+
+    /* Force all widget wrappers inside sidebar to full width */
+    section[data-testid="stSidebar"] .stMarkdown,
+    section[data-testid="stSidebar"] .stSlider,
+    section[data-testid="stSidebar"] .stMultiSelect,
+    section[data-testid="stSidebar"] .stButton,
+    section[data-testid="stSidebar"] .stDownloadButton,
+    section[data-testid="stSidebar"] .stMetric,
+    section[data-testid="stSidebar"] .stSelectbox,
+    section[data-testid="stSidebar"] .stTextInput,
+    section[data-testid="stSidebar"] .stNumberInput {
         width: 100% !important;
+        max-width: 100% !important;
+        box-sizing: border-box !important;
     }
-    section[data-testid="stSidebar"] .stMarkdown {
+
+    /* Ensure widget inner form controls stretch */
+    section[data-testid="stSidebar"] .stSlider > div,
+    section[data-testid="stSidebar"] .stMultiSelect > div,
+    section[data-testid="stSidebar"] .stButton > button,
+    section[data-testid="stSidebar"] .stSelectbox > div,
+    section[data-testid="stSidebar"] [data-baseweb="select"],
+    section[data-testid="stSidebar"] [data-baseweb="slider"] {
         width: 100% !important;
+        max-width: 100% !important;
+        box-sizing: border-box !important;
     }
+
     section[data-testid="stSidebar"] iframe {
         width: 100% !important;
     }
