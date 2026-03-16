@@ -125,6 +125,19 @@ st.markdown("""
         --ease-out: cubic-bezier(0.4, 0, 0.2, 1);
     }
 
+    /* ── Sidebar: always visible, prevent collapse ───────── */
+    [data-testid="collapsedControl"] {
+        display: none !important;
+    }
+    section[data-testid="stSidebar"] {
+        min-width: 280px !important;
+        max-width: 320px !important;
+    }
+    section[data-testid="stSidebar"][aria-expanded="false"] {
+        min-width: 280px !important;
+        margin-left: 0 !important;
+    }
+
     /* ── Global ────────────────────────────────────────── */
     html, body, [class*="css"] {
         font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif !important;
@@ -634,7 +647,7 @@ st.markdown("""
 <div class="hero-container">
     <div class="hero-eyebrow">MediGen Corp</div>
     <div class="hero-title">Strategic Synthesis Engine</div>
-    <div class="hero-subtitle">Query 1,050 internal documents across 8 systems. Get cited answers in seconds.</div>
+    <div class="hero-subtitle">Query internal documents across disparate systems. Get cited answers in seconds.</div>
     <div class="hero-divider"></div>
 </div>
 """, unsafe_allow_html=True)
