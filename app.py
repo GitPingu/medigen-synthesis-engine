@@ -139,14 +139,23 @@ st.markdown("""
         opacity: 1 !important;
         position: relative !important;
         background: var(--bg-secondary) !important;
-        padding: 1.5rem 1.25rem !important;
     }
     section[data-testid="stSidebar"] > div {
         width: 100% !important;
-        padding: 0 !important;
+        padding: 1rem 1.25rem !important;
     }
     section[data-testid="stSidebar"] > div > div {
         padding-top: 0 !important;
+        width: 100% !important;
+    }
+    section[data-testid="stSidebar"] [data-testid="stVerticalBlock"] {
+        width: 100% !important;
+    }
+    section[data-testid="stSidebar"] .stMarkdown {
+        width: 100% !important;
+    }
+    section[data-testid="stSidebar"] iframe {
+        width: 100% !important;
     }
 
     /* ── Global ────────────────────────────────────────── */
@@ -453,21 +462,26 @@ st.markdown("""
         background: var(--glass-bg);
         backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
         border: 1px solid var(--glass-border);
-        border-radius: var(--radius-md); padding: 1rem;
+        border-radius: var(--radius-md); padding: 0.75rem 1rem;
         text-align: center; margin-bottom: 0.5rem;
         transition: all 0.25s var(--ease-out);
         box-shadow: inset 0 1px 0 0 var(--glass-highlight);
+        width: 100% !important;
+        box-sizing: border-box;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
     }
     .sidebar-metric:hover {
         border-color: var(--accent-border);
         box-shadow: var(--shadow-glow), inset 0 1px 0 0 var(--glass-highlight);
     }
     .sidebar-metric .sm-value {
-        font-size: 1.6rem; font-weight: 700; color: var(--accent-bright);
+        font-size: 1.4rem; font-weight: 700; color: var(--accent-bright);
         margin: 0; letter-spacing: -0.02em;
     }
     .sidebar-metric .sm-label {
-        font-size: 0.65rem; color: var(--text-muted); text-transform: uppercase;
+        font-size: 0.7rem; color: var(--text-muted); text-transform: uppercase;
         letter-spacing: 2px; margin-top: 0.25rem; font-weight: 500;
     }
 
