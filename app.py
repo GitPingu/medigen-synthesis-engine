@@ -130,17 +130,23 @@ st.markdown("""
         display: none !important;
     }
     section[data-testid="stSidebar"] {
-        min-width: 280px !important;
-        max-width: 320px !important;
+        min-width: 340px !important;
+        max-width: 340px !important;
+        width: 340px !important;
         transform: none !important;
         display: flex !important;
         visibility: visible !important;
         opacity: 1 !important;
-        width: 280px !important;
         position: relative !important;
+        background: var(--bg-secondary) !important;
+        padding: 1.5rem 1.25rem !important;
     }
     section[data-testid="stSidebar"] > div {
-        width: 280px !important;
+        width: 100% !important;
+        padding: 0 !important;
+    }
+    section[data-testid="stSidebar"] > div > div {
+        padding-top: 0 !important;
     }
 
     /* ── Global ────────────────────────────────────────── */
@@ -457,11 +463,11 @@ st.markdown("""
         box-shadow: var(--shadow-glow), inset 0 1px 0 0 var(--glass-highlight);
     }
     .sidebar-metric .sm-value {
-        font-size: 1.4rem; font-weight: 700; color: var(--accent-bright);
+        font-size: 1.6rem; font-weight: 700; color: var(--accent-bright);
         margin: 0; letter-spacing: -0.02em;
     }
     .sidebar-metric .sm-label {
-        font-size: 0.55rem; color: var(--text-muted); text-transform: uppercase;
+        font-size: 0.65rem; color: var(--text-muted); text-transform: uppercase;
         letter-spacing: 2px; margin-top: 0.25rem; font-weight: 500;
     }
 
@@ -549,11 +555,11 @@ st.markdown("""
         background: linear-gradient(90deg, var(--accent), transparent);
     }
     .sidebar-brand .brand-name {
-        font-size: 0.62rem; font-weight: 600; letter-spacing: 4px;
+        font-size: 0.75rem; font-weight: 600; letter-spacing: 4px;
         text-transform: uppercase; color: var(--accent);
     }
     .sidebar-brand .brand-sub {
-        font-size: 0.72rem; color: var(--text-muted); margin-top: 0.3rem;
+        font-size: 0.85rem; color: var(--text-muted); margin-top: 0.3rem;
         letter-spacing: 0.3px;
     }
 
